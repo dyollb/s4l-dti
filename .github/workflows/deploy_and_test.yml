@@ -1,0 +1,70 @@
+name: Python Package CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    tags:
+      - 'v*.*.*'  # Matches version tags in the format v<Major>.<Minor>.<Patch>
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.8, 3.11, 3.12]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Install package
+      run: |
+        pip install .
+
+    - name: Run tests
+      run: |
+        pytest
+
+    - name: Run mypy
+      run: |
+        mypy src/
+
+  publish:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'  # Use the default Python version for publishing
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build the package
+      run: |
+        python -m build
+
+    - name: Publish to PyPI
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        python -m twine upload dist/*
