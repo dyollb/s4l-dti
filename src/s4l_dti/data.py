@@ -113,7 +113,7 @@ def concatenate_dwi(
     if skip_last:
         files = files[:-1]
 
-    components = typing.cast(list[nib.Nifti1Image], [nib.load(f) for f in files])
+    components = [typing.cast(nib.Nifti1Image, nib.load(f)) for f in files]
 
     n_components = len(components)
     shape = list(components[0].dataobj.shape)

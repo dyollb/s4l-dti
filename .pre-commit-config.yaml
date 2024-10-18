@@ -78,6 +78,6 @@ repos:
         additional_dependencies: [black]
         name: format notebooks
       - id: nbqa-pyupgrade
-        args: ["--py38-plus"]
+        args: ["--py38-plus", "--keep-runtime-typing"]
       - id: nbqa-isort
         args: []
