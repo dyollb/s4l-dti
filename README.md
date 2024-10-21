@@ -2,6 +2,7 @@
 
 [![Build Actions Status](https://github.com/dyollb/s4l-dti/workflows/CI/badge.svg)](https://github.com/dyollb/s4l-dti/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/s4l-dti.svg)](https://badge.fury.io/py/s4l-dti)
 
 This Python package provides pre-processing functions to help [Sim4Life](https://sim4life.swiss/) users prepare diffusion tensor images (DTI) for use in low-frequency electro-magnetic simulations. The primary goal is to convert DTI into a format supported by Sim4Life, enabling the assignment of anisotropic inhomogeneous conductivity maps in tissue models.
 
@@ -59,4 +60,4 @@ reconstruct_dti(
 )
 ```
 
-For more examples, see the [Jupyter notebook](notebooks/tutorial_dti_conductivity.ipynb).
+For more examples, see the [Jupyter notebook](notebooks/dti_preprocessing.ipynb).
