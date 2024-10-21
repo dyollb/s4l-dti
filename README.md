@@ -19,6 +19,12 @@ This Python package provides pre-processing functions to help [Sim4Life](https:/
 pip install s4l-dti
 ```
 
+or
+
+```
+pip install git+https://github.com/dyollb/s4l-dti.git#egg=s4l-dti
+```
+
 ### Usage
 
 Download IXI025 head dataset:
@@ -36,7 +42,7 @@ for key in download_files:
 Reconstruction and saving as Sim4Life compatible Nifti file:
 
 ```py
-from s4l_dti.reconstruct import recon_dti
+from s4l_dti.reconstruct import reconstruct_dti
 
 dwi_image_file = download_files["dwi"]
 bvec_file = download_files["bvec"]
@@ -44,7 +50,7 @@ bval_file = download_files["bval"]
 mask_file = download_files["labels"]
 s4l_dti_file = download_dir / "DTI-s4l.nii.gz"
 
-recon_dti(
+reconstruct_dti(
     img_file=dwi_aligned_denoised_image_file,
     bvec_file=bvec_file,
     bval_file=bval_file,

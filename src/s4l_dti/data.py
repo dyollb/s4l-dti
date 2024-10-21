@@ -11,13 +11,38 @@ from __future__ import annotations
 import shutil
 import tempfile
 import typing
+import urllib.request
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from zipfile import ZipFile
 
 import nibabel as nib
 import numpy as np
-import requests
 from dipy.data import fetch_stanford_hardi, fetch_stanford_labels, fetch_stanford_t1
+
+
+def download_file(url: str, dest_folder: Path, timeout: float | None = None):
+    """Download file from url"""
+    dest_folder.mkdir(exist_ok=True, parents=True)
+    file_name = dest_folder / url.split("/")[-1]
+
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            # If the HTTP response status is not 200, HTTPError is raised
+            with open(file_name, "wb") as out_file:
+                out_file.write(response.read())
+
+        print(f"Downloaded {file_name}")
+
+    except HTTPError as e:
+        print(f"HTTP error occurred: {e.code} {e.reason}")
+    except URLError as e:
+        print(f"Failed to reach the server: {e.reason}")
+    except TimeoutError:
+        print(f"Failed to download {url} due to a timeout.")
+
+    return file_name
 
 
 def download_stanford_data(
@@ -61,19 +86,11 @@ def download_ixi_025(
         force or (not download_dir.exists()) or (len(list(download_dir.glob("*"))) == 0)
     )
     if need_download:
-        base_url = "https://github.com/ITISFoundation/IXI025/releases/download/v1.0.0/"
-        file_name = "IXI025-Model_v1.0.0.zip"
-
-        url = f"{base_url}/{file_name}"
-        R = requests.get(f"{base_url}/{file_name}", allow_redirects=True)
-        if R.status_code != 200:
-            raise ConnectionError(
-                f"could not download {url}\nerror code: {R.status_code}"
-            )
+        url = "https://github.com/ITISFoundation/IXI025/releases/download/v1.0.0/IXI025-Model_v1.0.0.zip"
 
         with tempfile.TemporaryDirectory() as tempdir:
-            zip_path = Path(tempdir) / file_name
-            zip_path.write_bytes(R.content)
+
+            zip_path = download_file(url=url, dest_folder=Path(tempdir))
 
             with ZipFile(zip_path, "r") as zip_obj:
                 zip_obj.extractall(path=tempdir)

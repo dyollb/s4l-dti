@@ -23,7 +23,7 @@ from dipy.segment.mask import median_otsu
 from .register import extract_channel, resample_to
 
 
-def recon_dti(
+def reconstruct_dti(
     img_file: Path,
     bvec_file: Path,
     bval_file: Path,
@@ -74,4 +74,4 @@ def recon_dti(
 def main():
     import typer
 
-    typer.run(recon_dti)
+    typer.run(reconstruct_dti)

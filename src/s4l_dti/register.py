@@ -60,7 +60,7 @@ def get_logger() -> logging.Logger:
 
 def command_iteration(method: sitk.ImageRegistrationMethod, logger: logging.Logger):
     logger.info(
-        f"{method.GetOptimizerIteration()+1:3} = {method.GetMetricValue():10.5f}"
+        f"{method.GetOptimizerIteration() + 1:3} = {method.GetMetricValue():10.5f}"
     )
 
 
@@ -68,7 +68,7 @@ def command_linear_iteration(
     method: sitk.ImageRegistrationMethod, logger: logging.Logger
 ):
     logger.info(
-        f"{method.GetOptimizerIteration()+1:3} = {method.GetMetricValue():10.5f} : {method.GetOptimizerPosition()}"
+        f"{method.GetOptimizerIteration() + 1:3} = {method.GetMetricValue():10.5f} : {method.GetOptimizerPosition()}"
     )
 
 
@@ -171,6 +171,7 @@ def register(
     moving_mask: sitk.Image | None = None,
     dof: Transform = Transform.affine.value,  # type: ignore
     metric: RegistrationMetric = RegistrationMetric.mattes.value,  # type: ignore
+    sampling_percentage: float = 0.2,
     log_file: Path | None = None,
 ) -> sitk.Transform:
     """Run linear registration
@@ -202,6 +203,7 @@ def register(
         metric=metric,
         shrink_factors=[8, 4, 2],
         smoothing_sigmas=[3.0, 1.5, 1.0],
+        sampling_percentage=sampling_percentage,
         initial_transform=tx_init,
     )
 
@@ -263,6 +265,12 @@ def extract_channel(image: sitk.Image, idx: int = 0):
     comp = sitk.GetImageFromArray(sitk.GetArrayFromImage(tmp))
     comp.CopyInformation(tmp)
     return comp
+
+
+def ones_like(image: sitk.Image) -> sitk.Image:
+    ones = sitk.GetImageFromArray(np.ones_like(sitk.GetArrayViewFromImage(image)))
+    ones.CopyInformation(image)
+    return ones
 
 
 def resample_to(
