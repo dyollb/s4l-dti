@@ -11,7 +11,7 @@ This Python package provides pre-processing functions to help [Sim4Life](https:/
 - Align diffusion weighted images (DWI) to structural images, e.g. T1-weighted MRI (using SimpleITK)
 - Noise removal for DWI (using dipy)
 - DTI reconstruction from DWI (using dipy)
-- Save DTI in Sim4Life compatible ordering (XX, YY, ZZ, XY, YZ, ZX)
+- Save DTI in Sim4Life compatible ordering (XX, YY, ZZ, XY, YZ, ZX) (see [reconstruct.py](https://github.com/dyollb/s4l-dti/blob/3a7485f50eebac3167245fde888cdc6b2b382410/src/s4l_dti/reconstruct.py#L69))
 - Example data is automatically downloaded
 
 ### Installation
