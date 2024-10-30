@@ -81,3 +81,8 @@ repos:
         args: ["--py38-plus", "--keep-runtime-typing"]
       - id: nbqa-isort
         args: []
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.26.0
+    hooks:
+        - id: typos
