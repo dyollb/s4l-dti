@@ -7,7 +7,7 @@ import pytest
 from dipy.core.gradients import unique_bvals_magnitude
 from dipy.io import read_bvals_bvecs
 
-from s4l_dti.reconstruct import reconstruct_dti
+from s4l_dti.reconstruct import HighBValueWarning, reconstruct_dti
 
 requires_heavy = pytest.mark.skipif(
     not os.environ.get("S4L_DTI_HEAVY_TESTS"), reason="Set S4L_DTI_HEAVY_TESTS to run"
@@ -75,12 +75,12 @@ def test_reconstruct_auto_selects_dti_for_single_shell(download_data, tmp_path: 
             s4l_dti_file=s4l_dti_file,
             model="auto",
         )
-    our_warnings = [
-        w
-        for w in caught
-        if issubclass(w.category, UserWarning) and "s4l_dti" in (w.filename or "")
+    high_bval_warnings = [
+        w for w in caught if issubclass(w.category, HighBValueWarning)
     ]
-    assert not our_warnings, f"Unexpected UserWarning(s): {our_warnings}"
+    assert (
+        not high_bval_warnings
+    ), f"Unexpected HighBValueWarning(s): {high_bval_warnings}"
 
     assert s4l_dti_file.exists()
 
@@ -103,12 +103,12 @@ def test_reconstruct_auto_selects_dki_for_multishell(multishell_data, tmp_path: 
             s4l_dti_file=s4l_dti_file,
             model="auto",
         )
-    our_warnings = [
-        w
-        for w in caught
-        if issubclass(w.category, UserWarning) and "s4l_dti" in (w.filename or "")
+    high_bval_warnings = [
+        w for w in caught if issubclass(w.category, HighBValueWarning)
     ]
-    assert not our_warnings, f"Unexpected UserWarning(s): {our_warnings}"
+    assert (
+        not high_bval_warnings
+    ), f"Unexpected HighBValueWarning(s): {high_bval_warnings}"
 
     assert s4l_dti_file.exists()
 
@@ -158,7 +158,7 @@ def test_dti_warns_high_bval(multishell_data, tmp_path: Path):
     s4l_dti_file = tmp_path / "warn-s4l.nii.gz"
 
     # ISBI data has b=0/1500/2500, so DTI should warn
-    with pytest.warns(UserWarning, match="Gaussian diffusion"):
+    with pytest.warns(HighBValueWarning, match="Gaussian diffusion"):
         reconstruct_dti(
             img_file=dwi_file,
             bvec_file=bvec_file,

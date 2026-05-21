@@ -28,6 +28,10 @@ _HIGH_BVAL_THRESHOLD = 1500
 _B0_THRESHOLD = 50
 
 
+class HighBValueWarning(UserWarning):
+    """Raised when DTI is used with b-values where Gaussian diffusion breaks down."""
+
+
 def reconstruct_dti(
     img_file: Path,
     bvec_file: Path,
@@ -106,7 +110,7 @@ def reconstruct_dti(
             f"at b >= {_HIGH_BVAL_THRESHOLD}. The data contains b-value shells: "
             f"{shells.tolist()}. Consider using model='dki' for unbiased tensor "
             f"estimation, or set max_bval to restrict to lower shells.",
-            UserWarning,
+            HighBValueWarning,
             stacklevel=2,
         )
 
