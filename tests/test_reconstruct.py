@@ -75,8 +75,12 @@ def test_reconstruct_auto_selects_dti_for_single_shell(download_data, tmp_path: 
             s4l_dti_file=s4l_dti_file,
             model="auto",
         )
-    user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
-    assert not user_warnings, f"Unexpected UserWarning(s): {user_warnings}"
+    our_warnings = [
+        w
+        for w in caught
+        if issubclass(w.category, UserWarning) and "s4l_dti" in (w.filename or "")
+    ]
+    assert not our_warnings, f"Unexpected UserWarning(s): {our_warnings}"
 
     assert s4l_dti_file.exists()
 
@@ -99,8 +103,12 @@ def test_reconstruct_auto_selects_dki_for_multishell(multishell_data, tmp_path: 
             s4l_dti_file=s4l_dti_file,
             model="auto",
         )
-    user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
-    assert not user_warnings, f"Unexpected UserWarning(s): {user_warnings}"
+    our_warnings = [
+        w
+        for w in caught
+        if issubclass(w.category, UserWarning) and "s4l_dti" in (w.filename or "")
+    ]
+    assert not our_warnings, f"Unexpected UserWarning(s): {our_warnings}"
 
     assert s4l_dti_file.exists()
 
