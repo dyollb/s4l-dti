@@ -65,8 +65,8 @@ def test_reconstruct_auto_selects_dti_for_single_shell(download_data, tmp_path: 
     s4l_dti_file = tmp_path / "auto-s4l.nii.gz"
 
     # IXI data is single-shell (b=0/1000), so auto should select DTI without warning
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         reconstruct_dti(
             img_file=dwi_file,
             bvec_file=bvec_file,
@@ -75,6 +75,8 @@ def test_reconstruct_auto_selects_dti_for_single_shell(download_data, tmp_path: 
             s4l_dti_file=s4l_dti_file,
             model="auto",
         )
+    user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+    assert not user_warnings, f"Unexpected UserWarning(s): {user_warnings}"
 
     assert s4l_dti_file.exists()
 
@@ -88,8 +90,8 @@ def test_reconstruct_auto_selects_dki_for_multishell(multishell_data, tmp_path: 
     s4l_dti_file = tmp_path / "auto-dki-s4l.nii.gz"
 
     # Multi-shell data: auto should select DKI, no warning
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         reconstruct_dti(
             img_file=dwi_file,
             bvec_file=bvec_file,
@@ -97,6 +99,8 @@ def test_reconstruct_auto_selects_dki_for_multishell(multishell_data, tmp_path: 
             s4l_dti_file=s4l_dti_file,
             model="auto",
         )
+    user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+    assert not user_warnings, f"Unexpected UserWarning(s): {user_warnings}"
 
     assert s4l_dti_file.exists()
 

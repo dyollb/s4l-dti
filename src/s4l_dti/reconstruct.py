@@ -68,6 +68,14 @@ def reconstruct_dti(
                 f"max_bval={max_bval} would discard all volumes. "
                 f"B-values present: {np.unique(bvals)}"
             )
+        non_b0_kept = np.sum(bvals[keep] > _B0_THRESHOLD)
+        if non_b0_kept == 0:
+            raise ValueError(
+                f"max_bval={max_bval} discards all non-b0 volumes. "
+                f"At least one diffusion-weighted volume (b > {_B0_THRESHOLD}) "
+                f"is required for tensor fitting. "
+                f"B-values present: {np.unique(bvals)}"
+            )
         bvals = bvals[keep]
         bvecs = bvecs[keep]
         data = data[..., keep]
