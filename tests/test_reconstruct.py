@@ -78,9 +78,9 @@ def test_reconstruct_auto_selects_dti_for_single_shell(download_data, tmp_path: 
     high_bval_warnings = [
         w for w in caught if issubclass(w.category, HighBValueWarning)
     ]
-    assert (
-        not high_bval_warnings
-    ), f"Unexpected HighBValueWarning(s): {high_bval_warnings}"
+    assert not high_bval_warnings, (
+        f"Unexpected HighBValueWarning(s): {high_bval_warnings}"
+    )
 
     assert s4l_dti_file.exists()
 
@@ -106,9 +106,9 @@ def test_reconstruct_auto_selects_dki_for_multishell(multishell_data, tmp_path: 
     high_bval_warnings = [
         w for w in caught if issubclass(w.category, HighBValueWarning)
     ]
-    assert (
-        not high_bval_warnings
-    ), f"Unexpected HighBValueWarning(s): {high_bval_warnings}"
+    assert not high_bval_warnings, (
+        f"Unexpected HighBValueWarning(s): {high_bval_warnings}"
+    )
 
     assert s4l_dti_file.exists()
 

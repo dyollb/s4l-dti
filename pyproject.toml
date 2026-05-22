@@ -2,14 +2,75 @@
 requires = ["setuptools >= 64"]
 build-backend = "setuptools.build_meta"
 
-[tool.nbqa.isort]
-addopts = "--profile=black"
+[project]
+name = "s4l-dti"
+dynamic = ["version"]
+requires-python = ">=3.11"
+description = "Help pre-processing of DTI for use in Sim4Life"
+readme = "README.md"
+license = {text = "MIT"}
+dependencies = [
+    "dipy>=1.4.0",
+    "numpy>=1.22",
+    "SimpleITK",
+]
+
+[project.urls]
+Homepage = "https://github.com/dyollb/s4l-dti"
+"Bug Tracker" = "https://github.com/dyollb/s4l-dti/issues"
+"Source Code" = "https://github.com/dyollb/s4l-dti"
+
+[project.optional-dependencies]
+cli = [
+    "typer-slim",
+]
+nb = [
+    "ipykernel",
+    "matplotlib",
+]
+dev = [
+    "build",
+    "mypy",
+    "pre_commit",
+    "pytest",
+    "testbook",
+]
+
+[project.scripts]
+s4l-dti-download = "s4l_dti.data:main"
+s4l-dti-denoise = "s4l_dti.denoise:main"
+s4l-dti-reconstruct = "s4l_dti.reconstruct:main"
+s4l-dti-register = "s4l_dti.register:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "s4l_dti.__version__"}
+
+[tool.mypy]
+disallow_untyped_defs = false
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = false
+strict_equality = true
+show_column_numbers = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["dipy.*", "matplotlib.*", "SimpleITK", "setuptools"]
+ignore_missing_imports = true
 
 [tool.ruff]
-fix = true
-lint.per-file-ignores = {"notebooks/*" = [
-    "E402",
-]}
+target-version = "py311"
+extend-include = ["**/*.ipynb"]
 
-[tool.ruff-format]
-fix = true
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*" = ["E402"]
+
+[tool.ruff.format]
