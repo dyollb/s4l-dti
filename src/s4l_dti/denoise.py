@@ -20,10 +20,20 @@ def denoise_mppca(
     patch_radius: int = 2,
     pca_method: str = "eig",
 ) -> None:
-    """Run denoising using Marcenko-Pastur PCA
+    """Denoise a DWI image using Marchenko-Pastur PCA.
 
     Refer to dipy for more options and alternative algorithms:
     https://workshop.dipy.org/documentation/1.7.0/interfaces/denoise_flow/
+
+    Args:
+        image_file: Path to the input 4D DWI NIfTI file.
+        output_file: Path for the denoised output NIfTI file.
+        mask_file: Optional binary mask. Only voxels inside the mask are
+            used for PCA estimation.
+        patch_radius: Radius of the local patch used for PCA. Larger values
+            improve denoising but increase runtime.
+        pca_method: PCA algorithm — ``"eig"`` (eigenvalue decomposition) or
+            ``"svd"`` (singular value decomposition).
     """
     img = nib.load(image_file)
     assert isinstance(img, nib.Nifti1Image)

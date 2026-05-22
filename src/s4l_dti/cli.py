@@ -19,7 +19,14 @@ def register_command(
     func: Callable[..., Any],
     func_name: str | None = None,
 ):
-    """Register function as command"""
+    """Register a function as a Typer CLI command.
+
+    Args:
+        app: The Typer application to register the command with.
+        func: The callable to expose as a command.
+        func_name: Command name override. Defaults to the function name when
+            ``None``.
+    """
 
     @app.command(name=func_name)
     @wraps(func)
