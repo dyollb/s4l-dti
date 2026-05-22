@@ -6,11 +6,9 @@
 # This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
-from __future__ import annotations
-
 import logging
 import sys
-from enum import Enum
+from enum import StrEnum
 from functools import partial
 from pathlib import Path
 from typing import TypeVar
@@ -21,7 +19,7 @@ import SimpleITK as sitk
 TransformType = TypeVar("TransformType", bound=sitk.Transform)
 
 
-class RegistrationMetric(str, Enum):
+class RegistrationMetric(StrEnum):
     msqr = "msqr"
     ncc = "ncc"
     ants_ncc = "ants_ncc"
@@ -30,7 +28,7 @@ class RegistrationMetric(str, Enum):
     demons = "demons"
 
 
-class Transform(str, Enum):
+class Transform(StrEnum):
     affine = "affine"
     euler = "euler"
     translation = "translate"

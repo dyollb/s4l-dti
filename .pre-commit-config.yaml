@@ -5,7 +5,6 @@ ci:
   autofix_prs: true
   autoupdate_commit_msg: '[pre-commit.ci] pre-commit suggestions'
   autoupdate_schedule: quarterly
-  # submodules: true
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -22,13 +21,6 @@ repos:
         args: ['--maxkb=1024']
       - id: detect-private-key
 
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        name: upgrade code
-        args: ["--py311-plus"]
-
   - repo: https://github.com/hadialqattan/pycln
     rev: v2.6.0
     hooks:
@@ -36,17 +28,13 @@ repos:
         name: prune imports
         args: [--expand-stars]
 
-  - repo: https://github.com/PyCQA/isort
-    rev: 9.0.0a3
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
     hooks:
-      - id: isort
-        name: format imports
-        args: ["--profile", "black"]
-
-  - repo: https://github.com/psf/black
-    rev: 26.5.1
-    hooks:
-      - id: black
+      - id: ruff
+        name: lint and fix
+        args: [--fix]
+      - id: ruff-format
         name: format code
 
   - repo: https://github.com/executablebooks/mdformat
@@ -59,27 +47,7 @@ repos:
           - mdformat_frontmatter
         exclude: CHANGELOG.md
 
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.3.0
-    hooks:
-      - id: flake8
-        name: check PEP8
-        args: ["--ignore=E501,W503,E203"]
-
   - repo: https://github.com/crate-ci/typos
     rev: v1
     hooks:
       - id: typos
-
-  - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.9.1
-    hooks:
-      - id: nbqa-pyupgrade
-        args: ["--py38-plus", "--keep-runtime-typing"]
-      - id: nbqa-ruff-format
-      - id: nbqa-ruff
-
-  - repo: https://github.com/crate-ci/typos
-    rev: v1
-    hooks:
-        - id: typos

@@ -6,18 +6,17 @@
 # This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
-from __future__ import annotations
-
-import typing
+from collections.abc import Callable
 from functools import wraps
+from typing import TYPE_CHECKING, Any
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import typer
 
 
 def register_command(
-    app: typer.Typer,
-    func: typing.Callable[..., typing.Any],
+    app: "typer.Typer",
+    func: Callable[..., Any],
     func_name: str | None = None,
 ):
     """Register function as command"""

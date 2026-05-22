@@ -6,13 +6,11 @@
 # This software is released under the MIT License.
 #  https://opensource.org/licenses/MIT
 
-from __future__ import annotations
-
 import shutil
 import tempfile
-import typing
 import urllib.request
 from pathlib import Path
+from typing import cast
 from urllib.error import HTTPError, URLError
 from zipfile import ZipFile
 
@@ -89,7 +87,6 @@ def download_ixi_025(
         url = "https://github.com/ITISFoundation/IXI025/releases/download/v1.0.0/IXI025-Model_v1.0.0.zip"
 
         with tempfile.TemporaryDirectory() as tempdir:
-
             zip_path = download_file(url=url, dest_folder=Path(tempdir))
 
             with ZipFile(zip_path, "r") as zip_obj:
@@ -130,7 +127,7 @@ def concatenate_dwi(
     if skip_last:
         files = files[:-1]
 
-    components = [typing.cast(nib.Nifti1Image, nib.load(f)) for f in files]
+    components = [cast(nib.Nifti1Image, nib.load(f)) for f in files]
 
     n_components = len(components)
     shape = list(components[0].dataobj.shape)
