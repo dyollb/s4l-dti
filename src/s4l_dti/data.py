@@ -20,7 +20,16 @@ from dipy.data import fetch_stanford_hardi, fetch_stanford_labels, fetch_stanfor
 
 
 def download_file(url: str, dest_folder: Path, timeout: float | None = None):
-    """Download file from url"""
+    """Download a file from a URL to a local folder.
+
+    Args:
+        url: HTTP(S) URL of the file to download.
+        dest_folder: Destination directory. Created if it does not exist.
+        timeout: Optional timeout in seconds for the HTTP request.
+
+    Returns:
+        Path to the downloaded file inside ``dest_folder``.
+    """
     dest_folder.mkdir(exist_ok=True, parents=True)
     file_name = dest_folder / url.split("/")[-1]
 
@@ -46,10 +55,14 @@ def download_file(url: str, dest_folder: Path, timeout: float | None = None):
 def download_stanford_data(
     download_dir: Path = Path.home() / "Models" / "StanfordData",
 ) -> dict[str, Path]:
-    """Download stanford dwi data, t1 image and labelfield
+    """Download the Stanford HARDI dataset (DWI, T1, and label image).
 
     Args:
-        download_dir: specify folder where data is copied
+        download_dir: Directory where the data files are copied.
+
+    Returns:
+        Dictionary with keys ``dwi``, ``bvec``, ``bval``, ``t1``, and
+        ``labels`` mapping to the corresponding file paths.
     """
 
     def _fetch_and_copy(fetch_fun) -> list[Path]:
@@ -75,10 +88,15 @@ def download_ixi_025(
     download_dir: Path = Path.home() / "Models" / "IXI025",
     force: bool = False,
 ) -> dict[str, Path]:
-    """Download IXI025 data
+    """Download the IXI025 diffusion dataset.
 
     Args:
-        download_dir: specify folder where data is copied
+        download_dir: Directory where the data files are extracted.
+        force: Re-download and overwrite even if files already exist.
+
+    Returns:
+        Dictionary with keys ``dwi``, ``bvec``, ``bval``, ``t1``, and
+        ``labels`` mapping to the corresponding file paths.
     """
     need_download = (
         force or (not download_dir.exists()) or (len(list(download_dir.glob("*"))) == 0)
@@ -118,10 +136,19 @@ def concatenate_dwi(
     glob: str = "IXI*-DTI-[0-9][0-9].nii.gz",
     skip_last: bool = True,
 ):
-    """Concatenate DWI files into single image
+    """Concatenate individual DWI component files into a single 4D NIfTI image.
 
-    Note for the IXI dataset we must skip the last component:
-    https://neurostars.org/t/ixi-dataset-diffusion-data-number-of-directions/3506
+    Note:
+        For the IXI dataset the last component must be skipped due to a known
+        issue with the gradient table. See
+        https://neurostars.org/t/ixi-dataset-diffusion-data-number-of-directions/3506
+
+    Args:
+        input_dir: Directory containing the individual DWI component files.
+        dwi_file: Output path for the concatenated 4D NIfTI image.
+        glob: Glob pattern to match component files within ``input_dir``.
+        skip_last: If ``True``, the last matched file is excluded before
+            concatenating.
     """
     files = list(sorted(input_dir.glob(glob)))
     if skip_last:

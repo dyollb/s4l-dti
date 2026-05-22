@@ -38,6 +38,12 @@ class Transform(StrEnum):
 def configure_metric(
     registration_method: sitk.ImageRegistrationMethod, metric: RegistrationMetric
 ) -> None:
+    """Configure the similarity metric on a SimpleITK registration method.
+
+    Args:
+        registration_method: The registration method to configure.
+        metric: The similarity metric to use.
+    """
     if metric == RegistrationMetric.msqr:
         registration_method.SetMetricAsMeanSquares()
     elif metric == RegistrationMetric.ncc:
@@ -93,13 +99,34 @@ def _linear_register(
     smoothing_sigmas: list[float] = [0.0],  # in physical units
     interpolator=sitk.sitkLinear,
 ) -> TransformType:
-    """Run linear registration
+    """Find a transform to align the moving image to the fixed image.
 
-    Description:
-        Find transform to align the "moving" image to a "fixed" image.
-        The 'initial_transform' defines the type of transform, i.e. degrees
-        of freedom. Any initial alignment (guesses) can be provided via
-        the 'moving_transform'.
+    The ``initial_transform`` defines the degrees of freedom. An optional
+    ``moving_transform`` can provide an initial alignment guess applied before
+    optimisation.
+
+    Args:
+        fixed_image: Reference image that the moving image is aligned to.
+        moving_image: Image to be registered.
+        initial_transform: Transform type and initial parameters to optimise.
+        moving_transform: Optional pre-transform applied to the moving image
+            before registration.
+        metric: Similarity metric used during optimisation.
+        fixed_mask: Optional mask restricting the metric to a region of the
+            fixed image.
+        moving_mask: Optional mask restricting the metric to a region of the
+            moving image.
+        sampling_percentage: Fraction of voxels sampled per iteration
+            (0.0–1.0).
+        num_iterations: Maximum number of optimiser iterations.
+        shrink_factors: Downsampling factors per resolution level.
+        smoothing_sigmas: Gaussian smoothing sigmas in physical units per
+            resolution level.
+        interpolator: SimpleITK interpolator used when resampling the moving
+            image.
+
+    Returns:
+        The optimised transform of the same type as ``initial_transform``.
     """
     R = sitk.ImageRegistrationMethod()
 
@@ -172,10 +199,24 @@ def register(
     sampling_percentage: float = 0.2,
     log_file: Path | None = None,
 ) -> sitk.Transform:
-    """Run linear registration
+    """Align a moving image to a fixed image using linear registration.
 
-    Description:
-        Find transform to align the "moving" image to a "fixed" image.
+    Args:
+        fixed_image: Reference image that the moving image is aligned to.
+        moving_image: Image to be registered.
+        fixed_mask: Optional mask restricting the metric to a region of the
+            fixed image.
+        moving_mask: Optional mask restricting the metric to a region of the
+            moving image.
+        dof: Degrees of freedom controlling the transform family.
+        metric: Similarity metric used during optimisation.
+        sampling_percentage: Fraction of voxels sampled per iteration
+            (0.0–1.0).
+        log_file: Optional path to write the registration log.
+
+    Returns:
+        The estimated linear transform aligning ``moving_image`` to
+        ``fixed_image``.
     """
     logger = get_logger()
     if logger and log_file:
@@ -212,12 +253,22 @@ def apply_transform_header(
     moving_image: sitk.Image,
     transform: sitk.Transform,
 ) -> sitk.Image:
-    """Transform an image without resampling
+    """Apply a transform to an image by updating its header, without resampling.
 
-    Description:
-        The moving image is transformed without resampling/interpolation.
+    The origin and direction cosines are updated to reflect the transform so
+    that voxel data remains unchanged. Only translation and rigid transforms
+    are supported.
 
-        The transform maps a position in the fixed image to the moving image.
+    Args:
+        moving_image: 3D or 4D image whose header will be updated.
+        transform: Rigid or translation transform to apply.
+
+    Returns:
+        A copy of ``moving_image`` with the updated origin and direction.
+
+    Raises:
+        RuntimeError: If the image is not 3D or 4D, or if the transform type
+            is not supported.
     """
     if moving_image.GetDimension() not in (3, 4):
         raise RuntimeError("Only 3D/4D-images are supported")
@@ -259,6 +310,16 @@ def apply_transform_header(
 
 
 def extract_channel(image: sitk.Image, idx: int = 0):
+    """Extract a single channel from a multi-channel image.
+
+    Args:
+        image: Multi-channel SimpleITK image.
+        idx: Zero-based channel index to extract.
+
+    Returns:
+        A 3D scalar image containing the selected channel, with the same
+        spatial metadata as the input.
+    """
     tmp = image[..., idx]
     comp = sitk.GetImageFromArray(sitk.GetArrayFromImage(tmp))
     comp.CopyInformation(tmp)
@@ -266,6 +327,15 @@ def extract_channel(image: sitk.Image, idx: int = 0):
 
 
 def ones_like(image: sitk.Image) -> sitk.Image:
+    """Create an image of ones with the same geometry as the input.
+
+    Args:
+        image: Reference image whose spatial metadata is copied.
+
+    Returns:
+        A new image filled with ones sharing the same origin, spacing, and
+        direction as ``image``.
+    """
     ones = sitk.GetImageFromArray(np.ones_like(sitk.GetArrayViewFromImage(image)))
     ones.CopyInformation(image)
     return ones
@@ -276,6 +346,17 @@ def resample_to(
     ref_image: sitk.Image,
     nearest_neighbor: bool = True,
 ):
+    """Resample an image onto the grid of a reference image.
+
+    Args:
+        image: Image to resample.
+        ref_image: Reference image defining the target grid.
+        nearest_neighbor: If ``True``, use nearest-neighbour interpolation
+            (suitable for label images); otherwise use linear interpolation.
+
+    Returns:
+        The resampled image on the reference grid.
+    """
     return sitk.Resample(
         image,
         ref_image,

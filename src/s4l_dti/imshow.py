@@ -10,10 +10,20 @@ def plot(
     margin: float = 0.0,
     dpi: int = 80,
 ):
-    """Helper function to plot sitk.Image
+    """Display a SimpleITK image using matplotlib.
+
+    For 3D images a central axial slice is shown. For 4D vector images a
+    central axial slice of the RGB/RGBA channels is displayed.
 
     Copied from:
     https://simpleitk.org/SimpleITK-Notebooks/10_matplotlib%27s_imshow.html
+
+    Args:
+        img: The SimpleITK image to display.
+        factor: Integer scaling factor applied to the displayed image size.
+        title: Optional title shown above the plot.
+        margin: Fractional margin around the image axes (0.0 = no margin).
+        dpi: Dots per inch for the matplotlib figure.
     """
     import matplotlib.pyplot as plt
 
