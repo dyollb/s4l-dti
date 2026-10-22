@@ -36,6 +36,9 @@ def reconstruct_dti(
     bval_file: Path,
     s4l_dti_file: Path,
     mask_file: Path | None = None,
+    otsu_mask_dilation: int = 2,
+    use_mask_as_otsu_control: bool = False,
+    otsu_mask_save_path: Path | None = None,
     model: str = "auto",
     max_bval: int | None = None,
 ) -> None:
@@ -47,6 +50,13 @@ def reconstruct_dti(
         bval_file: Path to b-values file (FSL format).
         s4l_dti_file: Path for output DTI tensor NIfTI (Sim4Life ordering).
         mask_file: Optional binary mask. If None, median_otsu is used.
+        otsu_mask_dilation: Initial Otsu dilation iterations (default 2).
+        use_mask_as_otsu_control: Use the resampled mask_file only as a
+            containment control for median_otsu. Increase dilation by one until
+            every control voxel is inside the Otsu mask. Requires mask_file
+            and positive otsu_mask_dilation; raises ValueError if the Otsu
+            mask cannot grow to cover the control.
+        otsu_mask_save_path: Optional output path for the final Otsu mask. [Debugging Tool]
         model: Fitting model - "auto" (default), "dti", or "dki".
             "auto" selects DKI when >=2 non-zero b-value shells are present,
             otherwise DTI. DKI (Diffusional Kurtosis Imaging) correctly handles
@@ -56,6 +66,14 @@ def reconstruct_dti(
             before fitting. For example, max_bval=1100 on data with shells
             b=0/1000/2500 will keep only b=0 and b=1000 volumes.
     """
+
+    if use_mask_as_otsu_control:
+        if mask_file is None:
+            raise ValueError("use_mask_as_otsu_control requires mask_file.")
+        if otsu_mask_dilation < 1:
+            raise ValueError(
+                "otsu_mask_dilation must be positive in Otsu control mode."
+            )
 
     bvals, bvecs = read_bvals_bvecs(fspath(bval_file), fspath(bvec_file))
     img = nib.load(img_file)
@@ -112,6 +130,7 @@ def reconstruct_dti(
             stacklevel=2,
         )
 
+    control_mask = None
     if mask_file:
         maskimg = sitk.ReadImage(mask_file, sitk.sitkUInt16) != 0
         reference = extract_channel(sitk.ReadImage(img_file))
@@ -119,18 +138,41 @@ def reconstruct_dti(
         with tempfile.TemporaryDirectory() as tempdir:
             sitk.WriteImage(maskimg, Path(tempdir) / "mask.nii.gz")
             mask_nib = nib.load(Path(tempdir) / "mask.nii.gz")
-            mask = mask_nib.get_fdata()  # type: ignore [attr-defined]
-        maskdata = np.where(mask[..., np.newaxis], data, 0.0)
-    else:
+            assert isinstance(mask_nib, nib.Nifti1Image)
+            mask = np.asarray(mask_nib.get_fdata(), dtype=bool)
+        if use_mask_as_otsu_control:
+            control_mask = mask != 0
+        else:
+            maskdata = np.where(mask[..., np.newaxis], data, 0.0)
+
+    if mask_file is None or use_mask_as_otsu_control:
         n_volumes = data.shape[-1]
-        maskdata, _ = median_otsu(
-            data,
-            vol_idx=range(1, min(n_volumes, 15)),
-            median_radius=4,
-            numpass=4,
-            autocrop=False,
-            dilate=2,
-        )
+        previous_mask = None
+        while True:
+            maskdata, mask = median_otsu(
+                data,
+                vol_idx=range(1, min(n_volumes, 15)),
+                median_radius=4,
+                numpass=4,
+                autocrop=False,
+                dilate=otsu_mask_dilation,
+            )
+            mask = np.asarray(mask, dtype=bool)
+            if control_mask is None or not np.any(control_mask & ~mask):
+                break
+            if not np.any(mask) or (
+                previous_mask is not None and np.array_equal(mask, previous_mask)
+            ):
+                raise ValueError(
+                    "Otsu mask cannot cover the control mask: "
+                    f"mask is empty or stopped growing at dilation={otsu_mask_dilation}."
+                )
+            previous_mask = mask
+            otsu_mask_dilation += 1
+
+        if otsu_mask_save_path:
+            mask_image = nib.Nifti1Image(mask.astype(np.uint8), img.affine)
+            nib.save(mask_image, otsu_mask_save_path)
 
     gtab = gradient_table(bvals, bvecs)
 
@@ -165,6 +207,18 @@ def main():
         mask_file: Annotated[
             Path | None, typer.Option(help="Binary mask image")
         ] = None,
+        otsu_mask_dilation: Annotated[
+            int, typer.Option(help="Initial Otsu mask dilation iterations")
+        ] = 2,
+        use_mask_as_otsu_control: Annotated[
+            bool,
+            typer.Option(
+                help="Increase Otsu dilation until it contains the supplied mask"
+            ),
+        ] = False,
+        otsu_mask_save_path: Annotated[
+            Path | None, typer.Option(help="Save the final Otsu mask")
+        ] = None,
         model: Annotated[
             str,
             typer.Option(
@@ -183,6 +237,9 @@ def main():
             bval_file=bval_file,
             s4l_dti_file=s4l_dti_file,
             mask_file=mask_file,
+            otsu_mask_dilation=otsu_mask_dilation,
+            use_mask_as_otsu_control=use_mask_as_otsu_control,
+            otsu_mask_save_path=otsu_mask_save_path,
             model=model,
             max_bval=max_bval,
         )
