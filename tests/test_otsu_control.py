@@ -55,11 +55,11 @@ def reconstruction_inputs(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("control_voxel", "initial_dilation", "expected_dilations"),
+    ("control_voxel", "initial_dilation", "final_dilation"),
     [
-        ((4, 2, 2), 2, [2]),
-        ((4, 4, 2), 2, [2, 3, 4]),
-        ((4, 4, 4), 3, [3, 4, 5, 6]),
+        ((4, 2, 2), 2, 2),
+        ((4, 4, 2), 2, 4),
+        ((4, 4, 4), 3, 6),
     ],
 )
 def test_control_mask_adaptive_dilation(
@@ -67,7 +67,7 @@ def test_control_mask_adaptive_dilation(
     tmp_path,
     control_voxel,
     initial_dilation,
-    expected_dilations,
+    final_dilation,
 ):
     kwargs, data, affine, model, otsu = reconstruction_inputs
     control = np.zeros(data.shape[:3], dtype=np.uint8)
@@ -82,12 +82,11 @@ def test_control_mask_adaptive_dilation(
         otsu_mask_dilation=initial_dilation,
     )
 
-    assert [call.kwargs["dilate"] for call in otsu.call_args_list] == expected_dilations
+    otsu.assert_called_once()
+    assert otsu.call_args.kwargs["dilate"] == initial_dilation
     saved = nib.load(kwargs["otsu_mask_save_path"])
     mask = saved.get_fdata().astype(bool)
-    expected = (
-        np.abs(np.indices(control.shape) - 2).sum(axis=0) <= expected_dilations[-1]
-    )
+    expected = np.abs(np.indices(control.shape) - 2).sum(axis=0) <= final_dilation
     np.testing.assert_array_equal(mask, expected)
     assert not np.any((control != 0) & ~mask)
     assert np.any(mask & (control == 0))
@@ -144,9 +143,7 @@ def test_control_mode_requires_positive_dilation(reconstruction_inputs, dilation
 
 
 @pytest.mark.parametrize("empty", [True, False])
-def test_unreachable_control_fails_instead_of_looping(
-    reconstruction_inputs, tmp_path, empty
-):
+def test_control_mask_growth_terminates(reconstruction_inputs, tmp_path, empty):
     kwargs, data, affine, model, otsu = reconstruction_inputs
     control = np.ones(data.shape[:3], dtype=np.uint8)
     mask_file = tmp_path / "control.nii.gz"
@@ -157,16 +154,51 @@ def test_unreachable_control_fails_instead_of_looping(
     otsu.side_effect = None
     otsu.return_value = (np.where(mask[..., np.newaxis], data, 0.0), mask)
 
-    with pytest.raises(ValueError, match="cannot cover the control mask"):
+    if empty:
+        with pytest.raises(ValueError, match="cannot cover the control mask"):
+            reconstruction.reconstruct_dti(
+                **kwargs,
+                mask_file=mask_file,
+                use_mask_as_otsu_control=True,
+            )
+        model.fit.assert_not_called()
+        assert not kwargs["otsu_mask_save_path"].exists()
+    else:
         reconstruction.reconstruct_dti(
             **kwargs,
             mask_file=mask_file,
             use_mask_as_otsu_control=True,
         )
 
-    assert otsu.call_count == (1 if empty else 2)
-    model.fit.assert_not_called()
-    assert not kwargs["otsu_mask_save_path"].exists()
+        saved = nib.load(kwargs["otsu_mask_save_path"]).get_fdata()
+        np.testing.assert_array_equal(saved, control)
+        np.testing.assert_array_equal(model.fit.call_args.args[0], data)
+
+    otsu.assert_called_once()
+
+
+def test_control_dilation_does_not_wrap_at_edges(reconstruction_inputs, tmp_path):
+    kwargs, data, affine, model, otsu = reconstruction_inputs
+    mask = np.zeros(data.shape[:3], dtype=bool)
+    mask[0, 0, 0] = True
+    otsu.side_effect = None
+    otsu.return_value = (np.where(mask[..., np.newaxis], data, 0.0), mask)
+    control = np.zeros(mask.shape, dtype=np.uint8)
+    control[2, 0, 0] = 1
+    mask_file = tmp_path / "control.nii.gz"
+    nib.save(nib.Nifti1Image(control, affine), mask_file)
+
+    reconstruction.reconstruct_dti(
+        **kwargs, mask_file=mask_file, use_mask_as_otsu_control=True
+    )
+
+    expected = np.indices(mask.shape).sum(axis=0) <= 2
+    saved = nib.load(kwargs["otsu_mask_save_path"]).get_fdata().astype(bool)
+    np.testing.assert_array_equal(saved, expected)
+    np.testing.assert_array_equal(
+        model.fit.call_args.args[0], np.where(expected[..., np.newaxis], data, 0.0)
+    )
+    otsu.assert_called_once()
 
 
 def test_control_mode_with_real_median_otsu(
@@ -190,20 +222,25 @@ def test_control_mode_with_real_median_otsu(
         **kwargs, mask_file=mask_file, use_mask_as_otsu_control=True
     )
 
-    dilations = [call.kwargs["dilate"] for call in otsu.call_args_list]
-    assert len(dilations) > 1
-    assert dilations == list(range(2, dilations[-1] + 1))
+    otsu.assert_called_once()
+    assert otsu.call_args.kwargs["dilate"] == 2
     saved = nib.load(kwargs["otsu_mask_save_path"]).get_fdata().astype(bool)
     assert not np.any((control != 0) & ~saved)
-    _, previous = median_otsu(
-        data,
-        vol_idx=range(1, 7),
-        median_radius=4,
-        numpass=4,
-        autocrop=False,
-        dilate=dilations[-1] - 1,
-    )
-    assert np.any((control != 0) & ~previous)
+    for dilation in range(2, sum(data.shape[:3]) + 1):
+        _, expected = median_otsu(
+            data,
+            vol_idx=range(1, 7),
+            median_radius=4,
+            numpass=4,
+            autocrop=False,
+            dilate=dilation,
+        )
+        if not np.any((control != 0) & ~expected):
+            break
+    else:
+        pytest.fail("Reference dilation did not cover the control")
+    assert dilation > 2
+    np.testing.assert_array_equal(saved, expected)
     np.testing.assert_array_equal(
         model.fit.call_args.args[0], np.where(saved[..., np.newaxis], data, 0.0)
     )

@@ -52,8 +52,9 @@ def reconstruct_dti(
         mask_file: Optional binary mask. If None, median_otsu is used.
         otsu_mask_dilation: Initial Otsu dilation iterations (default 2).
         use_mask_as_otsu_control: Use the resampled mask_file only as a
-            containment control for median_otsu. Increase dilation by one until
-            every control voxel is inside the Otsu mask. Requires mask_file
+            containment control for median_otsu. Segment once, then grow the
+            mask with six-neighbor dilation until every control voxel is inside.
+            Requires mask_file
             and positive otsu_mask_dilation; raises ValueError if the Otsu
             mask cannot grow to cover the control.
         otsu_mask_save_path: Optional output path for the final Otsu mask. [Debugging Tool]
@@ -147,28 +148,35 @@ def reconstruct_dti(
 
     if mask_file is None or use_mask_as_otsu_control:
         n_volumes = data.shape[-1]
-        previous_mask = None
-        while True:
-            maskdata, mask = median_otsu(
-                data,
-                vol_idx=range(1, min(n_volumes, 15)),
-                median_radius=4,
-                numpass=4,
-                autocrop=False,
-                dilate=otsu_mask_dilation,
-            )
-            mask = np.asarray(mask, dtype=bool)
-            if control_mask is None or not np.any(control_mask & ~mask):
-                break
-            if not np.any(mask) or (
-                previous_mask is not None and np.array_equal(mask, previous_mask)
-            ):
-                raise ValueError(
-                    "Otsu mask cannot cover the control mask: "
-                    f"mask is empty or stopped growing at dilation={otsu_mask_dilation}."
-                )
-            previous_mask = mask
-            otsu_mask_dilation += 1
+        maskdata, mask = median_otsu(
+            data,
+            vol_idx=range(1, min(n_volumes, 15)),
+            median_radius=4,
+            numpass=4,
+            autocrop=False,
+            dilate=otsu_mask_dilation,
+        )
+        mask = np.asarray(mask, dtype=bool)
+        if control_mask is not None:
+            del maskdata
+            while np.any(control_mask & ~mask):
+                # Match DIPY's face-connected dilation without wrapping at edges.
+                expanded = mask.copy()
+                expanded[1:, :, :] |= mask[:-1, :, :]
+                expanded[:-1, :, :] |= mask[1:, :, :]
+                expanded[:, 1:, :] |= mask[:, :-1, :]
+                expanded[:, :-1, :] |= mask[:, 1:, :]
+                expanded[:, :, 1:] |= mask[:, :, :-1]
+                expanded[:, :, :-1] |= mask[:, :, 1:]
+                if np.array_equal(expanded, mask):
+                    raise ValueError(
+                        "Otsu mask cannot cover the control mask: "
+                        f"mask is empty or stopped growing at dilation={otsu_mask_dilation}."
+                    )
+                mask = expanded
+                otsu_mask_dilation += 1
+
+            maskdata = np.where(mask[..., np.newaxis], data, 0.0)
 
         if otsu_mask_save_path:
             mask_image = nib.Nifti1Image(mask.astype(np.uint8), img.affine)
