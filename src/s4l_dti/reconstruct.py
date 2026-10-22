@@ -54,8 +54,7 @@ def reconstruct_dti(
         use_mask_as_otsu_control: Use the resampled mask_file only as a
             containment control for median_otsu. Segment once, then grow the
             mask with six-neighbor dilation until every control voxel is inside.
-            Requires mask_file
-            and positive otsu_mask_dilation; raises ValueError if the Otsu
+            Requires mask_file and positive otsu_mask_dilation; raises ValueError if the Otsu
             mask cannot grow to cover the control.
         otsu_mask_save_path: Optional output path for the final Otsu mask. [Debugging Tool]
         model: Fitting model - "auto" (default), "dti", or "dki".
@@ -160,7 +159,6 @@ def reconstruct_dti(
         if control_mask is not None:
             del maskdata
             while np.any(control_mask & ~mask):
-                # Match DIPY's face-connected dilation without wrapping at edges.
                 expanded = mask.copy()
                 expanded[1:, :, :] |= mask[:-1, :, :]
                 expanded[:-1, :, :] |= mask[1:, :, :]
