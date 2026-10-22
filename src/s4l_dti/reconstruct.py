@@ -36,11 +36,11 @@ def reconstruct_dti(
     bval_file: Path,
     s4l_dti_file: Path,
     mask_file: Path | None = None,
+    model: str = "auto",
+    max_bval: int | None = None,
     otsu_mask_dilation: int = 2,
     use_mask_as_otsu_control: bool = False,
     otsu_mask_save_path: Path | None = None,
-    model: str = "auto",
-    max_bval: int | None = None,
 ) -> None:
     """Reconstruct diffusion tensor from DWI files.
 
