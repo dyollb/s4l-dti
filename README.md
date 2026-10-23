@@ -55,9 +55,22 @@ reconstruct_dti(
     img_file=dwi_aligned_denoised_image_file,
     bvec_file=bvec_file,
     bval_file=bval_file,
-    mask_file=mask_file
+    mask_file=mask_file,
     s4l_dti_file=s4l_dti_file,
 )
 ```
+
+To use an existing mask as a containment control rather than as the fitting
+mask, set `use_mask_as_otsu_control=True` and provide `mask_file`. The control
+mask is resampled onto the DWI grid with nearest-neighbor interpolation.
+Reconstruction runs `median_otsu` starting at `otsu_mask_dilation=2` and increases
+the dilation by one until all control voxels are inside the Otsu mask.
+The final Otsu mask (not its intersection with the control) is used for fitting.
+Set `otsu_mask_save_path` to save that mask. Control mode requires a positive
+initial dilation and raises an error if the Otsu mask is empty or stops growing
+before containment is reached.
+
+The CLI exposes the same settings as `--use-mask-as-otsu-control`,
+`--otsu-mask-dilation`, and `--otsu-mask-save-path`, together with `--mask-file`.
 
 For more examples, see the [Jupyter notebook](notebooks/dti_preprocessing.ipynb).

@@ -2,6 +2,7 @@ import os
 import warnings
 from pathlib import Path
 
+import nibabel as nib
 import numpy as np
 import pytest
 from dipy.core.gradients import unique_bvals_magnitude
@@ -30,6 +31,51 @@ def test_reconstruct_dti(download_data, tmp_path: Path):
     )
 
     assert s4l_dti_file.exists()
+
+
+@pytest.mark.parametrize(
+    "otsu_mask_dilation, expected_mask_size", [(2, 205299), (5, 246882)]
+)
+def test_reconstruct_dti_dilation(
+    download_data, tmp_path: Path, otsu_mask_dilation: int, expected_mask_size: int
+):
+    """Save each dilated mask and its middle axial slice for visual comparison."""
+    dwi_file = download_data["dwi"]
+    bvec_file = download_data["bvec"]
+    bval_file = download_data["bval"]
+    s4l_dti_file = tmp_path / "DTI-s4l.nii.gz"
+
+    mask_path = tmp_path / f"otsu_mask_dilation_{otsu_mask_dilation}.nii.gz"
+
+    reconstruct_dti(
+        img_file=dwi_file,
+        bvec_file=bvec_file,
+        bval_file=bval_file,
+        mask_file=None,
+        otsu_mask_dilation=otsu_mask_dilation,
+        s4l_dti_file=s4l_dti_file,
+        otsu_mask_save_path=mask_path,
+    )
+
+    assert s4l_dti_file.exists()
+    assert mask_path.exists()
+
+    mask_image = nib.load(mask_path)
+    dwi_image = nib.load(dwi_file)
+    assert isinstance(mask_image, nib.Nifti1Image)
+    assert isinstance(dwi_image, nib.Nifti1Image)
+    mask = mask_image.get_fdata()
+    assert mask.shape == dwi_image.shape[:3]
+    np.testing.assert_allclose(mask_image.affine, dwi_image.affine)
+    assert np.all((mask == 0) | (mask == 1))
+    assert mask.any()
+
+    dti_image = nib.load(s4l_dti_file)
+    assert isinstance(dti_image, nib.Nifti1Image)
+    dti = dti_image.get_fdata()
+    assert dti.shape == (*dwi_image.shape[:3], 6)
+
+    assert mask.sum() == expected_mask_size
 
 
 @requires_heavy
