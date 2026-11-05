@@ -43,7 +43,9 @@ def test_apply_transform_header_cli_uses_function(monkeypatch):
     from pathlib import Path
     from unittest.mock import Mock
 
-    import typer
+    import pytest
+
+    typer = pytest.importorskip("typer")
 
     import s4l_dti.register as registration
 
