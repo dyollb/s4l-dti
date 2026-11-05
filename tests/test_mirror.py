@@ -172,3 +172,111 @@ def test_cli_forwards_fix_mirror(monkeypatch):
     captured_args[:] = base + ["--no-fix-mirror"]
     reconstruction.main()
     assert reconstruct.call_args.kwargs["fix_mirror"] is False
+
+
+_S4L_TO_MATRIX = [[0, 3, 5], [3, 1, 4], [5, 4, 2]]
+
+
+def _principal_direction(components):
+    tensor = np.asarray(components)[_S4L_TO_MATRIX]
+    return np.linalg.eigh(tensor)[1][:, -1]
+
+
+def _unit(v):
+    v = np.asarray(v, dtype=float)
+    return v / np.linalg.norm(v)
+
+
+def _fit_anisotropic(tmp_path, monkeypatch, affine, bvec_direction, **kwargs):
+    """Fit a real tensor whose principal axis is ``bvec_direction`` in the
+    frame of the b-vector file, and return the saved tensor image."""
+    rng = np.random.default_rng(0)
+    directions = rng.normal(size=(30, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    bvecs = np.vstack([[0.0, 0.0, 0.0], directions])
+    bvals = np.r_[0.0, np.full(30, 1000.0)]
+
+    v = _unit(bvec_direction)
+    D = 1e-3 * (0.2 * np.eye(3) + 1.5 * np.outer(v, v))
+    signal = 1000 * np.exp(-bvals * np.einsum("ni,ij,nj->n", bvecs, D, bvecs))
+    data = np.broadcast_to(signal, (5, 5, 5, signal.size)).copy()
+
+    img_file = tmp_path / "dwi.nii.gz"
+    nib.save(nib.Nifti1Image(data, affine), img_file)
+    np.savetxt(tmp_path / "dwi.bval", bvals[np.newaxis])
+    np.savetxt(tmp_path / "dwi.bvec", bvecs.T)
+
+    def full_mask(data, **_):
+        return data, np.ones(data.shape[:3], dtype=bool)
+
+    monkeypatch.setattr(reconstruction, "median_otsu", full_mask)
+    out = tmp_path / kwargs.pop("name", "tensor.nii.gz")
+    reconstruction.reconstruct_dti(
+        img_file=img_file,
+        bvec_file=tmp_path / "dwi.bvec",
+        bval_file=tmp_path / "dwi.bval",
+        s4l_dti_file=out,
+        model="dti",
+        **kwargs,
+    )
+    return nib.load(out)
+
+
+# Each case: affine, principal direction in the FSL b-vector frame, and the
+# expected physical (world) direction, derived by hand from the FSL convention
+# (voxel axes; x negated when det(affine) > 0).
+_ROT_Z = [[0, -2, 0, 0], [2, 0, 0, 0], [0, 0, 2, 0], [0, 0, 0, 1]]
+_MIRROR_SWAP = [[0, -2, 0, 0], [-2, 0, 0, 0], [0, 0, 2, 0], [0, 0, 0, 1]]
+
+
+@pytest.mark.parametrize(
+    "affine, fsl_direction, world_direction",
+    [
+        pytest.param(np.diag([-2.0, 2, 2, 1]), [-1, 1, 0], [1, 1, 0], id="LAS-xy"),
+        pytest.param(np.diag([-2.0, 2, 2, 1]), [-1, 0, 1], [1, 0, 1], id="LAS-xz"),
+        pytest.param(np.diag([2.0, 2, 2, 1]), [-1, 1, 0], [1, 1, 0], id="RAS-xy"),
+        pytest.param(np.diag([2.0, 2, 2, 1]), [0, 1, 1], [0, 1, 1], id="RAS-yz"),
+        pytest.param(np.array(_ROT_Z, float), [-2, -1, 0], [1, 2, 0], id="rot-z"),
+        pytest.param(
+            np.array(_MIRROR_SWAP, float), [-2, -1, 0], [1, 2, 0], id="mirrored-swap"
+        ),
+    ],
+)
+@pytest.mark.parametrize("fix_mirror", [True, False])
+def test_tensor_direction_is_physical(
+    tmp_path, monkeypatch, affine, fsl_direction, world_direction, fix_mirror
+):
+    saved = _fit_anisotropic(
+        tmp_path, monkeypatch, affine, fsl_direction, fix_mirror=fix_mirror
+    )
+    principal = _principal_direction(saved.get_fdata()[2, 2, 2])
+    assert abs(principal @ _unit(world_direction)) == pytest.approx(1, abs=1e-6)
+
+
+def test_world_frame_bvecs_are_used_as_is(tmp_path, monkeypatch):
+    saved = _fit_anisotropic(
+        tmp_path,
+        monkeypatch,
+        np.array(_MIRROR_SWAP, float),
+        [1, 2, 0],
+        bvec_frame="world",
+    )
+    principal = _principal_direction(saved.get_fdata()[2, 2, 2])
+    assert abs(principal @ _unit([1, 2, 0])) == pytest.approx(1, abs=1e-6)
+
+
+def test_unknown_bvec_frame_is_rejected(tmp_path, monkeypatch):
+    with pytest.raises(ValueError, match="bvec_frame"):
+        _fit_anisotropic(
+            tmp_path, monkeypatch, np.eye(4), [1, 0, 0], bvec_frame="voxel"
+        )
+
+
+def test_flip_keeps_world_frame_components(tmp_path, monkeypatch):
+    affine = np.diag([-2.0, 2, 2, 1])
+    on = _fit_anisotropic(tmp_path, monkeypatch, affine, [-1, 1, 1], name="on.nii.gz")
+    off = _fit_anisotropic(
+        tmp_path, monkeypatch, affine, [-1, 1, 1], fix_mirror=False, name="off.nii.gz"
+    )
+    assert det3(on.affine) > 0
+    np.testing.assert_allclose(on.get_fdata(), off.get_fdata()[::-1])
