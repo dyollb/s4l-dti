@@ -399,7 +399,7 @@ def main():
     def apply_transform_header_cli(
         moving_image: Path, transform: Path, transformed_moving_image: Path
     ) -> None:
-        result = apply_transform_header_cli(
+        result = apply_transform_header(
             sitk.ReadImage(moving_image), sitk.ReadTransform(transform)
         )
         sitk.WriteImage(result, transformed_moving_image)
