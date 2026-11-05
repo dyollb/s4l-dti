@@ -256,7 +256,7 @@ def reconstruct_dti(
             mask_image = nib.Nifti1Image(mask.astype(np.uint8), img.affine)
             nib.save(mask_image, otsu_mask_save_path)
 
-    gtab = gradient_table(bvals, _bvecs_to_world(bvecs, img.affine, bvec_frame))
+    gtab = gradient_table(bvals, bvecs=_bvecs_to_world(bvecs, img.affine, bvec_frame))
 
     if use_dki:
         tenmodel = DiffusionKurtosisModel(gtab)
