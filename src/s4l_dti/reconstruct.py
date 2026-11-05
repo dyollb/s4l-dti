@@ -30,6 +30,39 @@ class HighBValueWarning(UserWarning):
     """Raised when DTI is used with b-values where Gaussian diffusion breaks down."""
 
 
+def _flip_to_right_handed(image: nib.Nifti1Image) -> nib.Nifti1Image:
+    """Return ``image`` re-oriented so its affine is right-handed (det > 0).
+
+    If the affine already has a non-negative determinant the image is
+    returned unchanged. Otherwise exactly one voxel axis is reversed with a
+    world-preserving re-orientation: the data and affine are updated together
+    so every value stays at the same physical location. The flipped axis is
+    the one that leaves the volume closest to canonical RAS+.
+
+    The tensor components are stored in the world/gradient frame, which a
+    world-preserving voxel flip does not change, so they are intentionally
+    left untouched.
+    """
+    affine = image.affine
+    if np.linalg.det(affine[:3, :3]) >= 0:
+        return image
+
+    canonical = ("R", "A", "S")
+    best_axis, best_score = 0, -1
+    for axis in range(3):
+        flipped = affine.copy()
+        flipped[:3, axis] = -flipped[:3, axis]
+        score = sum(
+            code == want for code, want in zip(nib.aff2axcodes(flipped), canonical)
+        )
+        if score > best_score:
+            best_axis, best_score = axis, score
+
+    ornt = np.array([[0, 1], [1, 1], [2, 1]], dtype=np.int8)
+    ornt[best_axis, 1] = -1
+    return image.as_reoriented(ornt)
+
+
 def reconstruct_dti(
     img_file: Path,
     bvec_file: Path,
@@ -41,6 +74,7 @@ def reconstruct_dti(
     otsu_mask_dilation: int = 2,
     use_mask_as_otsu_control: bool = False,
     otsu_mask_save_path: Path | None = None,
+    fix_mirror: bool = True,
 ) -> None:
     """Reconstruct diffusion tensor from DWI files.
 
@@ -57,6 +91,9 @@ def reconstruct_dti(
             Requires mask_file and positive otsu_mask_dilation; raises ValueError if the Otsu
             mask cannot grow to cover the control.
         otsu_mask_save_path: Optional output path for the final Otsu mask. [Debugging Tool]
+        fix_mirror: If True (default), flip the output tensor so its affine is
+            right-handed (det > 0), guarding against mirrored transforms causing
+            bugs downstream in Sim4Life. The flip preserves physical locations.
         model: Fitting model - "auto" (default), "dti", or "dki".
             "auto" selects DKI when >=2 non-zero b-value shells are present,
             otherwise DTI. DKI (Diffusional Kurtosis Imaging) correctly handles
@@ -197,6 +234,8 @@ def reconstruct_dti(
     ids = [0, 2, 5, 1, 4, 3]
     D_s4l = D[..., ids]
     image2 = nib.Nifti1Image(D_s4l, img.affine)
+    if fix_mirror:
+        image2 = _flip_to_right_handed(image2)
     nib.save(image2, s4l_dti_file)
 
 
@@ -236,6 +275,12 @@ def main():
             int | None,
             typer.Option(help="Discard volumes with b-value above this threshold"),
         ] = None,
+        fix_mirror: Annotated[
+            bool,
+            typer.Option(
+                help="Flip the tensor so its affine is right-handed (det > 0)"
+            ),
+        ] = True,
     ) -> None:
         reconstruct_dti(
             img_file=img_file,
@@ -248,6 +293,7 @@ def main():
             otsu_mask_save_path=otsu_mask_save_path,
             model=model,
             max_bval=max_bval,
+            fix_mirror=fix_mirror,
         )
 
     typer.run(_main)
