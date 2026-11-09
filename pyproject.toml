@@ -11,6 +11,7 @@ readme = "README.md"
 license = {text = "MIT"}
 dependencies = [
     "dipy>=1.4.0",
+    "nibabel>=5.0",
     "numpy>=1.22",
     "SimpleITK",
 ]

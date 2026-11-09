@@ -10,6 +10,7 @@ import tempfile
 import warnings
 from os import fspath
 from pathlib import Path
+from typing import Literal
 
 import nibabel as nib
 import numpy as np
@@ -30,6 +31,67 @@ class HighBValueWarning(UserWarning):
     """Raised when DTI is used with b-values where Gaussian diffusion breaks down."""
 
 
+BvecFrame = Literal["fsl", "world"]
+
+
+def _bvecs_to_world(
+    bvecs: np.ndarray, affine: np.ndarray, bvec_frame: BvecFrame
+) -> np.ndarray:
+    """Express gradient directions in the world (scanner) frame of ``affine``.
+
+    FSL b-vectors are given along the voxel axes, except that the first
+    component is negated when the affine is right-handed (det > 0). They are
+    rotated into world coordinates with the orthogonal part of the affine
+    (polar decomposition, so voxel scaling and shear are ignored).
+    """
+    if bvec_frame == "world":
+        return bvecs
+    if bvec_frame != "fsl":
+        raise ValueError(f"Unknown bvec_frame '{bvec_frame}'. Choose 'fsl' or 'world'.")
+
+    linear = np.asarray(affine, dtype=float)[:3, :3]
+    u, _, vt = np.linalg.svd(linear)
+    rotation = u @ vt
+
+    voxel_bvecs = np.array(bvecs, dtype=float)
+    if np.linalg.det(linear) > 0:
+        voxel_bvecs[:, 0] = -voxel_bvecs[:, 0]
+    return voxel_bvecs @ rotation.T
+
+
+def _flip_to_right_handed(image: nib.Nifti1Image) -> nib.Nifti1Image:
+    """Return ``image`` re-oriented so its affine is right-handed (det > 0).
+
+    If the affine already has a non-negative determinant the image is
+    returned unchanged. Otherwise exactly one voxel axis is reversed with a
+    world-preserving re-orientation: the data and affine are updated together
+    so every value stays at the same physical location. The flipped axis is
+    the one that leaves the volume closest to canonical RAS+.
+
+    The tensor components are expressed in the world frame (see
+    ``_bvecs_to_world``), which a world-preserving voxel flip does not
+    change, so they are intentionally left untouched.
+    """
+    affine = image.affine
+    if np.linalg.det(affine[:3, :3]) >= 0:
+        return image
+
+    canonical = ("R", "A", "S")
+    best_axis, best_score = 0, -1
+    for axis in range(3):
+        flipped = affine.copy()
+        flipped[:3, axis] = -flipped[:3, axis]
+        score = sum(
+            code == want for code, want in zip(nib.aff2axcodes(flipped), canonical)
+        )
+        if score > best_score:
+            best_axis, best_score = axis, score
+
+    ornt = np.array([[0, 1], [1, 1], [2, 1]], dtype=np.int8)
+    ornt[best_axis, 1] = -1
+    return image.as_reoriented(ornt)
+
+
 def reconstruct_dti(
     img_file: Path,
     bvec_file: Path,
@@ -41,14 +103,20 @@ def reconstruct_dti(
     otsu_mask_dilation: int = 2,
     use_mask_as_otsu_control: bool = False,
     otsu_mask_save_path: Path | None = None,
+    fix_mirror: bool = True,
+    bvec_frame: BvecFrame = "fsl",
 ) -> None:
     """Reconstruct diffusion tensor from DWI files.
+
+    The tensor components are written in the world (scanner) frame of the
+    DWI affine, which is the frame Sim4Life uses for tensor fields.
 
     Args:
         img_file: Path to 4D DWI NIfTI file.
         bvec_file: Path to gradient directions file (FSL format).
         bval_file: Path to b-values file (FSL format).
-        s4l_dti_file: Path for output DTI tensor NIfTI (Sim4Life ordering).
+        s4l_dti_file: Path for output DTI tensor NIfTI (Sim4Life ordering,
+            world-frame components).
         mask_file: Optional binary mask. If None, median_otsu is used.
         otsu_mask_dilation: Initial Otsu dilation iterations (default 2).
         use_mask_as_otsu_control: Use the resampled mask_file only as a
@@ -57,6 +125,18 @@ def reconstruct_dti(
             Requires mask_file and positive otsu_mask_dilation; raises ValueError if the Otsu
             mask cannot grow to cover the control.
         otsu_mask_save_path: Optional output path for the final Otsu mask. [Debugging Tool]
+        fix_mirror: If True (default), flip the output tensor when its affine is
+            mirrored (det < 0) so it becomes right-handed. The flip preserves
+            voxel locations and, since components are world-frame, tensor
+            orientations. The mirrored check is internal, so the default is
+            safe. [Debugging Tool] Set False to keep the mirrored output for
+            downstream comparison or to reproduce pre-1.4.0 results.
+        bvec_frame: Frame of the b-vectors in ``bvec_file``. The frame is not
+            stored in the file and cannot be detected from the vectors; take it
+            from provenance. "fsl" (default, and what dcm2niix writes) means
+            voxel axes with x negated for right-handed affines; they are
+            rotated into the world frame before fitting. "world" means they are
+            already in the world (scanner) frame, e.g. DICOM or MRtrix tables.
         model: Fitting model - "auto" (default), "dti", or "dki".
             "auto" selects DKI when >=2 non-zero b-value shells are present,
             otherwise DTI. DKI (Diffusional Kurtosis Imaging) correctly handles
@@ -180,7 +260,7 @@ def reconstruct_dti(
             mask_image = nib.Nifti1Image(mask.astype(np.uint8), img.affine)
             nib.save(mask_image, otsu_mask_save_path)
 
-    gtab = gradient_table(bvals, bvecs)
+    gtab = gradient_table(bvals, bvecs=_bvecs_to_world(bvecs, img.affine, bvec_frame))
 
     if use_dki:
         tenmodel = DiffusionKurtosisModel(gtab)
@@ -197,6 +277,8 @@ def reconstruct_dti(
     ids = [0, 2, 5, 1, 4, 3]
     D_s4l = D[..., ids]
     image2 = nib.Nifti1Image(D_s4l, img.affine)
+    if fix_mirror:
+        image2 = _flip_to_right_handed(image2)
     nib.save(image2, s4l_dti_file)
 
 
@@ -236,6 +318,19 @@ def main():
             int | None,
             typer.Option(help="Discard volumes with b-value above this threshold"),
         ] = None,
+        fix_mirror: Annotated[
+            bool,
+            typer.Option(
+                help="Flip mirrored tensors so the affine is right-handed (det > 0)"
+            ),
+        ] = True,
+        bvec_frame: Annotated[
+            str,
+            typer.Option(
+                help="B-vector frame (from provenance): 'fsl' (voxel axes, "
+                "FSL/dcm2niix convention) or 'world' (scanner frame)"
+            ),
+        ] = "fsl",
     ) -> None:
         reconstruct_dti(
             img_file=img_file,
@@ -248,6 +343,8 @@ def main():
             otsu_mask_save_path=otsu_mask_save_path,
             model=model,
             max_bval=max_bval,
+            fix_mirror=fix_mirror,
+            bvec_frame=bvec_frame,  # type: ignore[arg-type]
         )
 
     typer.run(_main)
