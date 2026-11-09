@@ -125,14 +125,18 @@ def reconstruct_dti(
             Requires mask_file and positive otsu_mask_dilation; raises ValueError if the Otsu
             mask cannot grow to cover the control.
         otsu_mask_save_path: Optional output path for the final Otsu mask. [Debugging Tool]
-        fix_mirror: If True (default), flip the output tensor so its affine is
-            right-handed (det > 0), guarding against mirrored transforms causing
-            bugs downstream in Sim4Life. The flip preserves physical locations
-            and, since components are world-frame, tensor orientations.
-        bvec_frame: Frame of the b-vectors in ``bvec_file``. "fsl" (default)
-            means FSL/dcm2niix convention (voxel axes, x negated for
-            right-handed affines); they are rotated into the world frame before
-            fitting. "world" means they are already in the world frame.
+        fix_mirror: If True (default), flip the output tensor when its affine is
+            mirrored (det < 0) so it becomes right-handed. The flip preserves
+            voxel locations and, since components are world-frame, tensor
+            orientations. The mirrored check is internal, so the default is
+            safe. [Debugging Tool] Set False to keep the mirrored output for
+            downstream comparison or to reproduce pre-1.4.0 results.
+        bvec_frame: Frame of the b-vectors in ``bvec_file``. The frame is not
+            stored in the file and cannot be detected from the vectors; take it
+            from provenance. "fsl" (default, and what dcm2niix writes) means
+            voxel axes with x negated for right-handed affines; they are
+            rotated into the world frame before fitting. "world" means they are
+            already in the world (scanner) frame, e.g. DICOM or MRtrix tables.
         model: Fitting model - "auto" (default), "dti", or "dki".
             "auto" selects DKI when >=2 non-zero b-value shells are present,
             otherwise DTI. DKI (Diffusional Kurtosis Imaging) correctly handles
@@ -317,14 +321,14 @@ def main():
         fix_mirror: Annotated[
             bool,
             typer.Option(
-                help="Flip the tensor so its affine is right-handed (det > 0)"
+                help="Flip mirrored tensors so the affine is right-handed (det > 0)"
             ),
         ] = True,
         bvec_frame: Annotated[
             str,
             typer.Option(
-                help="B-vector frame: 'fsl' (voxel axes, FSL convention) or "
-                "'world' (already in scanner frame)"
+                help="B-vector frame (from provenance): 'fsl' (voxel axes, "
+                "FSL/dcm2niix convention) or 'world' (scanner frame)"
             ),
         ] = "fsl",
     ) -> None:
